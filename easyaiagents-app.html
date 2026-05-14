@@ -7,6 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+  /* Hide Blogger navbar */
+  #navbar-iframe, .navbar, #navbar, .b-navbar, #b-navbar { display: none !important; height: 0 !important; visibility: hidden !important; }
+</style>
+<style>
   /* ── RESET & BASE ── */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -867,9 +871,7 @@
 <!-- ── SCRIPT ──────────────────────────────────── -->
 <script>
 // ── CONFIG ──
-// Change this to your backend URL when deployed
-const API = 'http://localhost:3001/api';
-// e.g. 'https://easyaiagents.onrender.com/api'
+const API = 'https://easyaiagentonline.vercel.app/api';
 
 let token = localStorage.getItem('eaa_token');
 let currentUser = null;
