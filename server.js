@@ -3,9 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 
-const authRoutes = require('./routes/auth');
-const agentRoutes = require('./routes/agents');
-const planRoutes = require('./routes/plans');
+// ── Import routes from ROOT level (not /routes/ folder) ──────────────────────
+const authRoutes = require('./auth');
+const agentRoutes = require('./agents');
+const planRoutes = require('./plans');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -17,12 +18,13 @@ const allowedOrigins = [
   'http://127.0.0.1:5500',
   'http://www.easyaiagents.online',
   'https://www.easyaiagents.online',
+  'https://easyaiagents.online',
+  'https://easyaiagents.blogspot.com',
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error(`CORS blocked: ${origin}`));
@@ -36,16 +38,15 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting - prevent abuse
+// Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 100,
   message: { error: 'Too many requests, please try again later' }
 });
-
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10, // stricter for auth
+  max: 10,
   message: { error: 'Too many login attempts, please try again later' }
 });
 
@@ -87,10 +88,12 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// ── START ─────────────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n🚀 EasyAIAgents API running on port ${PORT}`);
-  console.log(`   Health check: http://localhost:${PORT}/api/health\n`);
-});
+// ── START — Vercel compatible ─────────────────────────────────────────────────
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`\n🚀 EasyAIAgents API running on port ${PORT}`);
+    console.log(`   Health: http://localhost:${PORT}/api/health\n`);
+  });
+}
 
 module.exports = app;
