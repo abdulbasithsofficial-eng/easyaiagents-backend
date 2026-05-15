@@ -22,6 +22,59 @@ const resend = new Resend(RESEND_API_KEY);
 let users = [];
 let agents = [];
 let otps = {};
+// ─── Google OAuth ─────────────────────────
+app.get('/api/auth/google', (req, res) => {
+  const redirectUri = 'https://www.easyaiagents.online/api/auth/google/callback';
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=email%20profile`;
+  res.redirect(url);
+});
+
+app.get('/api/auth/google/callback', async (req, res) => {
+  const { code } = req.query;
+  if (!code) {
+    return res.status(400).json({ error: 'No code provided' });
+  }
+
+  try {
+    // Exchange code for access token
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: 'https://www.easyaiagents.online/api/auth/google/callback',
+        grant_type: 'authorization_code'
+      })
+    });
+    const tokenData = await tokenResponse.json();
+
+    // Get user info
+    const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` }
+    });
+    const userInfo = await userResponse.json();
+
+    // Check if user exists, create if not
+    let user = users.find(u => u.email === userInfo.email);
+    if (!user) {
+      user = {
+        id: uuidv4(),
+        name: userInfo.name,
+        email: userInfo.email,
+        password: '' // Google users don't have password
+      };
+      users.push(user);
+    }
+
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    // Redirect to frontend with token
+    res.redirect(`https://www.easyaiagents.online?token=${token}&user=${encodeURIComponent(JSON.stringify(user))}`);
+  } catch (error) {
+    res.status(500).json({ error: 'Authentication failed', details: error.message });
+  }
+});
 
 // ─── Auth Routes ─────────────────────────
 app.post('/api/auth/signup', async (req, res) => {
