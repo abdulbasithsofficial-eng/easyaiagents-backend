@@ -9,6 +9,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Root route
 app.get('/', (req, res) => {
   res.json({ status: 'OK', message: 'EasyAIAgents Backend is running!' });
 });
@@ -18,7 +19,7 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
 app.get('/api/auth/google', (req, res) => {
-  const redirectUri = 'https://easyaiagents-backend-3pxqh07cz.vercel.app/api/auth/google/callback';
+  const redirectUri = 'https://api.easyaiagents.online/api/auth/google/callback';
   const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=email%20profile`;
   res.redirect(url);
 });
@@ -37,7 +38,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
         code,
         client_id: GOOGLE_CLIENT_ID,
         client_secret: GOOGLE_CLIENT_SECRET,
-        redirect_uri: 'https://easyaiagents-backend-3pxqh07cz.vercel.app/api/auth/google/callback',
+        redirect_uri: 'https://api.easyaiagents.online/api/auth/google/callback',
         grant_type: 'authorization_code'
       })
     });
@@ -66,6 +67,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
     res.status(500).json({ error: 'Authentication failed', details: error.message });
   }
 });
+
 // ─── Auth Routes ─────────────────────────
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this';
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
