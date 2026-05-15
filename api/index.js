@@ -9,22 +9,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ Root route - Vercel health check
+// Root route
 app.get('/', (req, res) => {
   res.json({ status: 'OK', message: 'EasyAIAgents Backend is running!' });
 });
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this';
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-
-const resend = new Resend(RESEND_API_KEY);
-
-let users = [];
-let agents = [];
-let otps = {};
 // ─── Google OAuth ─────────────────────────
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+
 app.get('/api/auth/google', (req, res) => {
-  const redirectUri = 'https://www.easyaiagents.online/api/auth/google/callback';
+  const redirectUri = 'https://easyaiagents-backend-3pxqh07cz.vercel.app/api/auth/google/callback';
   const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=email%20profile`;
   res.redirect(url);
 });
@@ -44,7 +39,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
         code,
         client_id: GOOGLE_CLIENT_ID,
         client_secret: GOOGLE_CLIENT_SECRET,
-        redirect_uri: 'https://www.easyaiagents.online/api/auth/google/callback',
+        redirect_uri: 'https://easyaiagents-backend-3pxqh07cz.vercel.app/api/auth/google/callback',
         grant_type: 'authorization_code'
       })
     });
@@ -63,20 +58,30 @@ app.get('/api/auth/google/callback', async (req, res) => {
         id: uuidv4(),
         name: userInfo.name,
         email: userInfo.email,
-        password: '' // Google users don't have password
+        password: ''
       };
       users.push(user);
     }
 
     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
-    // Redirect to frontend with token
+    // Redirect to Blogger frontend with token
     res.redirect(`https://www.easyaiagents.online?token=${token}&user=${encodeURIComponent(JSON.stringify(user))}`);
   } catch (error) {
+    console.error('Google OAuth error:', error);
     res.status(500).json({ error: 'Authentication failed', details: error.message });
   }
 });
 
 // ─── Auth Routes ─────────────────────────
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this';
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+
+const resend = new Resend(RESEND_API_KEY);
+
+let users = [];
+let agents = [];
+let otps = {};
+
 app.post('/api/auth/signup', async (req, res) => {
   const { name, email, password } = req.body;
   if (users.find(u => u.email === email)) {
@@ -185,5 +190,4 @@ app.get('/api/stats', (req, res) => {
   res.json({ agentCount: agents.length });
 });
 
-// ✅ Vercel export
 module.exports = app;
