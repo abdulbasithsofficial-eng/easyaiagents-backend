@@ -31,7 +31,6 @@ app.get('/api/auth/google/callback', async (req, res) => {
   }
 
   try {
-    // Exchange code for access token
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -45,13 +44,11 @@ app.get('/api/auth/google/callback', async (req, res) => {
     });
     const tokenData = await tokenResponse.json();
 
-    // Get user info
     const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
       headers: { Authorization: `Bearer ${tokenData.access_token}` }
     });
     const userInfo = await userResponse.json();
 
-    // Check if user exists, create if not
     let user = users.find(u => u.email === userInfo.email);
     if (!user) {
       user = {
@@ -64,7 +61,6 @@ app.get('/api/auth/google/callback', async (req, res) => {
     }
 
     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
-    // Redirect to Blogger frontend with token
     res.redirect(`https://www.easyaiagents.online?token=${token}&user=${encodeURIComponent(JSON.stringify(user))}`);
   } catch (error) {
     console.error('Google OAuth error:', error);
