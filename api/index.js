@@ -66,7 +66,6 @@ app.get('/api/auth/google/callback', async (req, res) => {
     res.status(500).json({ error: 'Authentication failed', details: error.message });
   }
 });
-
 // ─── Auth Routes ─────────────────────────
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this';
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
