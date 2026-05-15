@@ -9,12 +9,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ✅ Root route - Vercel health check
+app.get('/', (req, res) => {
+  res.json({ status: 'OK', message: 'EasyAIAgents Backend is running!' });
+});
+
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this';
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
 const resend = new Resend(RESEND_API_KEY);
 
-// In-memory storage (temporary)
 let users = [];
 let agents = [];
 let otps = {};
@@ -128,5 +132,5 @@ app.get('/api/stats', (req, res) => {
   res.json({ agentCount: agents.length });
 });
 
-// ✅ IMPORTANT: Vercel ke liye export
+// ✅ Vercel export
 module.exports = app;
