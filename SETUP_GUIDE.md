@@ -1,3 +1,4 @@
+https://claude.ai/share/ce900ea5-297c-4894-bc7e-fc237f5726c4
 # EasyAIAgents — Complete Setup & Deployment Guide
 
 ## Project Structure
