@@ -1,60 +1,78 @@
 const mongoose = require('mongoose');
 
-// ── Connect to MongoDB ────────────────────────────────────────────────────────
-let isConnected = false;
+// ── Vercel-compatible MongoDB connection ──────────────────────────────────────
+// Keep connection alive between serverless function calls
+let cached = global.mongoose;
+if (!cached) cached = global.mongoose = { conn: null, promise: null };
 
 async function connectDB() {
-  if (isConnected) return;
-  try {
-    await mongoose.connect(process.env.MONGODB_URI, {
+  // Already connected
+  if (cached.conn && mongoose.connection.readyState === 1) {
+    return cached.conn;
+  }
+
+  // Connection in progress
+  if (!cached.promise) {
+    const opts = {
       dbName: 'easyaiagents',
       bufferCommands: false,
-    });
-    isConnected = true;
-    console.log('✅ MongoDB connected');
-  } catch (err) {
-    console.error('❌ MongoDB connection error:', err.message);
-    throw err;
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+    };
+    cached.promise = mongoose.connect(process.env.MONGODB_URI, opts)
+      .then(m => {
+        console.log('✅ MongoDB connected');
+        return m;
+      })
+      .catch(err => {
+        cached.promise = null;
+        console.error('❌ MongoDB error:', err.message);
+        throw err;
+      });
   }
+
+  cached.conn = await cached.promise;
+  return cached.conn;
 }
 
 // ── USER SCHEMA ───────────────────────────────────────────────────────────────
 const userSchema = new mongoose.Schema({
-  name:            { type: String, required: true, trim: true },
-  email:           { type: String, required: true, unique: true, lowercase: true, trim: true },
-  password:        { type: String, default: null }, // null for Google users
-  googleId:        { type: String, default: null },
-  plan:            { type: String, enum: ['free','starter','professional','agency'], default: 'free' },
-  messagesUsed:    { type: Number, default: 0 },
-  emailVerified:   { type: Boolean, default: false },
-  otp:             { type: String, default: null },
-  otpExpiry:       { type: Date,   default: null },
-  planUpgradedAt:  { type: Date,   default: null },
+  name:           { type: String, required: true, trim: true },
+  email:          { type: String, required: true, unique: true, lowercase: true, trim: true },
+  password:       { type: String, default: null },
+  googleId:       { type: String, default: null },
+  plan:           { type: String, enum: ['free','starter','professional','agency'], default: 'free' },
+  messagesUsed:   { type: Number, default: 0 },
+  emailVerified:  { type: Boolean, default: false },
+  otp:            { type: String, default: null },
+  otpExpiry:      { type: Date, default: null },
+  planUpgradedAt: { type: Date, default: null },
 }, { timestamps: true });
 
 // ── AGENT SCHEMA ──────────────────────────────────────────────────────────────
 const agentSchema = new mongoose.Schema({
-  userId:           { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  name:             { type: String, required: true, trim: true },
-  templateId:       { type: String, required: true },
-  template:         { type: String },
-  templateIcon:     { type: String },
-  description:      { type: String },
-  trainingData:     { type: String, default: '' },
-  trainingType:     { type: String, enum: ['text','url','manual'], default: 'text' },
-  personality:      { type: String, default: 'professional' },
-  language:         { type: String, default: 'English' },
+  userId:             { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  name:               { type: String, required: true, trim: true },
+  templateId:         { type: String, required: true },
+  template:           { type: String },
+  templateIcon:       { type: String },
+  description:        { type: String },
+  trainingData:       { type: String, default: '' },
+  trainingType:       { type: String, enum: ['text','url','manual'], default: 'text' },
+  personality:        { type: String, default: 'professional' },
+  language:           { type: String, default: 'English' },
   customInstructions: { type: String, default: '' },
-  status:           { type: String, enum: ['draft','training','live','paused'], default: 'draft' },
-  messagesHandled:  { type: Number, default: 0 },
-  embedCode:        { type: String, default: null },
-  deployType:       { type: String, default: 'website' },
-  whatsappConnected:{ type: Boolean, default: false },
-  trainedAt:        { type: Date, default: null },
-  deployedAt:       { type: Date, default: null },
+  status:             { type: String, enum: ['draft','training','live','paused'], default: 'draft' },
+  messagesHandled:    { type: Number, default: 0 },
+  embedCode:          { type: String, default: null },
+  deployType:         { type: String, default: 'website' },
+  whatsappConnected:  { type: Boolean, default: false },
+  trainedAt:          { type: Date, default: null },
+  deployedAt:         { type: Date, default: null },
 }, { timestamps: true });
 
-// ── MESSAGE HISTORY (for real AI conversations) ───────────────────────────────
+// ── MESSAGE SCHEMA ────────────────────────────────────────────────────────────
 const messageSchema = new mongoose.Schema({
   agentId:   { type: mongoose.Schema.Types.ObjectId, ref: 'Agent', required: true },
   sessionId: { type: String, required: true },
@@ -68,76 +86,64 @@ const Message = mongoose.models.Message || mongoose.model('Message', messageSche
 
 // ── USER FUNCTIONS ────────────────────────────────────────────────────────────
 async function findUserByEmail(email) {
-  await connectDB();
   return User.findOne({ email: email.toLowerCase() });
 }
 async function findUserById(id) {
-  await connectDB();
   return User.findById(id);
 }
 async function createUser(data) {
-  await connectDB();
   const user = new User(data);
   return user.save();
 }
 async function updateUser(id, updates) {
-  await connectDB();
   return User.findByIdAndUpdate(id, updates, { new: true });
 }
 async function saveOtp(email, otp) {
-  await connectDB();
-  const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+  const expiry = new Date(Date.now() + 10 * 60 * 1000);
   return User.findOneAndUpdate(
     { email: email.toLowerCase() },
     { otp, otpExpiry: expiry },
-    { new: true }
+    { new: true, upsert: false }
   );
 }
 async function verifyOtp(email, otp) {
-  await connectDB();
   const user = await User.findOne({ email: email.toLowerCase() });
-  if (!user || user.otp !== otp) return null;
-  if (user.otpExpiry < new Date()) return null; // expired
+  if (!user) return null;
+  if (user.otp !== otp) return null;
+  if (!user.otpExpiry || user.otpExpiry < new Date()) return null;
   await User.findByIdAndUpdate(user._id, { otp: null, otpExpiry: null, emailVerified: true });
   return user;
 }
 
 // ── AGENT FUNCTIONS ───────────────────────────────────────────────────────────
 async function getAgentsByUser(userId) {
-  await connectDB();
   return Agent.find({ userId }).sort({ createdAt: -1 });
 }
 async function getAgentById(id) {
-  await connectDB();
   return Agent.findById(id);
 }
 async function createAgent(data) {
-  await connectDB();
   const agent = new Agent(data);
   return agent.save();
 }
 async function updateAgent(id, updates) {
-  await connectDB();
   return Agent.findByIdAndUpdate(id, updates, { new: true });
 }
 async function deleteAgent(id) {
-  await connectDB();
   await Message.deleteMany({ agentId: id });
   return Agent.findByIdAndDelete(id);
 }
 
 // ── MESSAGE FUNCTIONS ─────────────────────────────────────────────────────────
 async function saveMessage(agentId, sessionId, role, content) {
-  await connectDB();
   const msg = new Message({ agentId, sessionId, role, content });
   return msg.save();
 }
 async function getMessages(agentId, sessionId, limit = 10) {
-  await connectDB();
   return Message.find({ agentId, sessionId }).sort({ createdAt: -1 }).limit(limit);
 }
 
-// ── PLAN FUNCTIONS ────────────────────────────────────────────────────────────
+// ── PLAN DATA ─────────────────────────────────────────────────────────────────
 const PLANS = [
   { id: 'free',         name: 'Free',         price: 0,   agentLimit: 1,  messageLimit: 500   },
   { id: 'starter',      name: 'Starter',      price: 27,  agentLimit: 3,  messageLimit: 5000  },
