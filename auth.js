@@ -67,7 +67,7 @@ router.post('/send-otp', async (req, res) => {
     if (!email) return res.status(400).json({ error: 'Email is required' });
 
     const user = await findUserByEmail(email);
-    if (type === 'login' && !user)
+    if ((type === 'login' || type === 'reset') && !user)
       return res.status(404).json({ error: 'No account found with this email' });
 
     const otp = genOtp();
@@ -175,3 +175,25 @@ router.put('/profile', authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
+
+// ── POST /api/auth/reset-password ─────────────────────────────────────────────
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword)
+      return res.status(400).json({ error: 'Email, OTP and new password are required' });
+    if (newPassword.length < 6)
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+
+    const user = await verifyOtp(email, otp);
+    if (!user) return res.status(400).json({ error: 'Invalid or expired OTP. Please request a new one.' });
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await updateUser(user._id, { password: hashedPassword });
+
+    res.json({ message: 'Password reset successfully' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
