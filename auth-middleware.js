@@ -6,7 +6,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'easyaiagents-change-this-secret';
 function generateToken(userId) {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
 }
-
+function verifyToken(token) {
+  return jwt.verify(token, JWT_SECRET);
+}
 async function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -24,4 +26,4 @@ async function authMiddleware(req, res, next) {
   }
 }
 
-module.exports = { generateToken, authMiddleware };
+module.exports = { generateToken, authMiddleware, verifyToken };
