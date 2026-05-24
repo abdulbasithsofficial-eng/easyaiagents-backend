@@ -148,20 +148,15 @@ router.post('/:id/deploy', authMiddleware, async (req, res) => {
 
     const embedCode = `<!-- EasyAIAgents Widget — ${agent.name} -->
 <script>
-(function(){
-  window.EAA = {
-    agentId: "${agentId}",
-    apiUrl: "${process.env.FRONTEND_URL || 'https://easyaiagentsonline-backend.vercel.app'}/api",
-    name: "${agent.name}",
-    icon: "${agent.templateIcon}",
-    color: "#e85a1e"
-  };
-  var s = document.createElement('script');
-  s.src = 'https://easyaiagents.online/widget.js';
-  s.async = true;
-  document.head.appendChild(s);
-})();
-</script>`;
+window.EAA = {
+  agentId: "${agentId}",
+  apiUrl: "https://api.easyaiagents.online/api",
+  name: "${agent.name}",
+  icon: "${agent.templateIcon}",
+  color: "#e85a1e"
+};
+</script>
+<script src='https://easyaiagents.online/wp-content/themes/theme/widget.js'></script>`;
 
     const updated = await updateAgent(agent._id, {
       status: 'live',
@@ -206,7 +201,7 @@ router.post('/:id/chat', async (req, res) => {
 
     // Call Groq AI — Llama 3 (free & fast)
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: 'llama3-8b-8192',
       messages: [
         { role: 'system', content: buildSystemPrompt(agent) },
         ...historyFormatted,
