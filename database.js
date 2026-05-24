@@ -129,6 +129,10 @@ async function createAgent(data) {
 async function updateAgent(id, updates) {
   return Agent.findByIdAndUpdate(id, updates, { new: true });
 }
+async function deleteUser(id) {
+  await Agent.deleteMany({ userId: id });
+  return User.findByIdAndDelete(id);
+}
 async function deleteAgent(id) {
   await Message.deleteMany({ agentId: id });
   return Agent.findByIdAndDelete(id);
@@ -155,7 +159,7 @@ function getPlanById(id) { return PLANS.find(p => p.id === id) || null; }
 
 module.exports = {
   connectDB,
-  findUserByEmail, findUserById, createUser, updateUser, saveOtp, verifyOtp,
+  findUserByEmail, findUserById, createUser, updateUser, saveOtp, verifyOtp, deleteUser,
   getAgentsByUser, getAgentById, createAgent, updateAgent, deleteAgent,
   saveMessage, getMessages,
   getAllPlans, getPlanById,
