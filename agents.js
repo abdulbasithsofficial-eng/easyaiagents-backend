@@ -206,7 +206,7 @@ router.post('/:id/chat', async (req, res) => {
 
     // Call Groq AI — Llama 3 (free & fast)
     const completion = await groq.chat.completions.create({
-      model: 'llama3-8b-8192',
+      model: 'llama-3.1-8b-instant',
       messages: [
         { role: 'system', content: buildSystemPrompt(agent) },
         ...historyFormatted,
