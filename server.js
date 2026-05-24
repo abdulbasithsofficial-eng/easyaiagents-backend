@@ -17,13 +17,20 @@ const allowedOrigins = [
   'http://127.0.0.1:5500',
   'https://easyaiagents.online',
   'https://www.easyaiagents.online',
+  'https://easyaisgents.blogspot.com',
+  /.blogspot.com$/,
+  /.wordpress.com$/,
   'https://app.easyaiagents.online',
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    if (!origin) return cb(null, true);
+    const allowed = allowedOrigins.some(o => 
+      typeof o === 'string' ? o === origin : o.test(origin)
+    );
+    if (allowed) return cb(null, true);
     cb(new Error(`CORS blocked: ${origin}`));
   },
   credentials: true,
