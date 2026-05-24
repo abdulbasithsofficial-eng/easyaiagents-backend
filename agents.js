@@ -156,7 +156,7 @@ window.EAA = {
   color: "#e85a1e"
 };
 </script>
-<script src='https://easyaiagents.online/wp-content/themes/theme/widget.js'></script>`;
+<script src="https://api.easyaiagents.online/widget.js"></script>`;
 
     const updated = await updateAgent(agent._id, {
       status: 'live',
