@@ -2,57 +2,87 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { findUserByEmail, createUser, findUserById, updateUser, saveOtp, verifyOtp, deleteUser } = require('./database');
-const { generateToken, authMiddleware } = require('./auth-middleware');
+const { generateToken, authMiddleware, verifyToken } = require('./auth-middleware');
 const { sendOtpEmail } = require('./mailer');
+
+const { OAuth2Client } = require('google-auth-library');
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 function genOtp() { return Math.floor(100000 + Math.random() * 900000).toString(); }
 
-// SIGNUP
+// ── GOOGLE SIGN-IN
+router.post('/google-verify', async (req, res) => {
+  try {
+    const { credential } = req.body;
+    if (!credential) return res.status(400).json({ error: 'Google credential required' });
+    const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: GOOGLE_CLIENT_ID });
+    const { email, name, sub: googleId, picture } = ticket.getPayload();
+    if (!email) return res.status(400).json({ error: 'Could not get email from Google' });
+    let user = await findUserByEmail(email);
+    if (!user) {
+      user = await createUser({ name: name || email.split('@')[0], email, googleId, picture, emailVerified: true, password: null, plan: 'free' });
+    } else if (!user.googleId) {
+      await updateUser(user._id, { googleId, emailVerified: true });
+    }
+    const token = generateToken(user._id);
+    res.json({ message: 'Google sign-in successful', token, user: { id: user._id, name: user.name, email: user.email, plan: user.plan || 'free' } });
+  } catch (err) {
+    console.error('Google verify error:', err);
+    res.status(401).json({ error: 'Google sign-in failed. Please try again.' });
+  }
+});
+
+// ── SIGNUP (with OTP)
 router.post('/signup', async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, otp } = req.body;
     if (!name || !email || !password) return res.status(400).json({ error: 'Name, email and password required' });
     if (password.length < 6) return res.status(400).json({ error: 'Password min 6 characters' });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email' });
     if (await findUserByEmail(email)) return res.status(409).json({ error: 'Email already registered' });
+    if (!otp) return res.status(400).json({ error: 'Verification code required' });
+    const otpValid = await verifyOtp(email, otp);
+    if (!otpValid) return res.status(400).json({ error: 'Invalid or expired verification code' });
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await createUser({ name: name.trim(), email, password: hashedPassword, emailVerified: false });
+    const user = await createUser({ name: name.trim(), email, password: hashedPassword, emailVerified: true, plan: 'free' });
     const token = generateToken(user._id);
-    res.status(201).json({ message: 'Account created', token, user: { id: user._id, name: user.name, email: user.email, plan: user.plan } });
+    res.status(201).json({ message: 'Account created', token, user: { id: user._id, name: user.name, email: user.email, plan: user.plan || 'free' } });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
-// LOGIN (password)
+// ── LOGIN
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
     const user = await findUserByEmail(email);
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-    if (!user.password) return res.status(401).json({ error: 'Use Google Sign-In' });
+    if (!user.password) return res.status(401).json({ error: 'This account uses Google Sign-In. Please use Continue with Google.' });
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ error: 'Invalid credentials' });
     const token = generateToken(user._id);
-    res.json({ message: 'Login successful', token, user: { id: user._id, name: user.name, email: user.email, plan: user.plan } });
+    res.json({ message: 'Login successful', token, user: { id: user._id, name: user.name, email: user.email, plan: user.plan || 'free' } });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
-// SEND OTP (signup or login)
+// ── SEND OTP
 router.post('/send-otp', async (req, res) => {
   try {
     const { email, type } = req.body;
     if (!email) return res.status(400).json({ error: 'Email required' });
+    if (!['signup', 'login', 'reset'].includes(type)) return res.status(400).json({ error: 'Invalid OTP type' });
     const user = await findUserByEmail(email);
-    if (type === 'login' && !user) return res.status(404).json({ error: 'No account found' });
+    if (type === 'login' && !user) return res.status(404).json({ error: 'No account found with this email' });
+    if (type === 'reset' && !user) return res.status(404).json({ error: 'No account found with this email' });
     const otp = genOtp();
-    const name = user ? user.name : 'User';
     await saveOtp(email, otp);
-    await sendOtpEmail(email, otp, name);
+    await sendOtpEmail(email, otp, user ? user.name : 'User', type);
     res.json({ message: 'OTP sent', email });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Failed to send OTP' }); }
 });
 
-// VERIFY OTP (for signup completion)
+// ── VERIFY OTP (login)
 router.post('/verify-otp', async (req, res) => {
   try {
     const { email, otp } = req.body;
@@ -60,43 +90,46 @@ router.post('/verify-otp', async (req, res) => {
     const user = await verifyOtp(email, otp);
     if (!user) return res.status(400).json({ error: 'Invalid or expired OTP' });
     const token = generateToken(user._id);
-    res.json({ message: 'Verified', token, user: { id: user._id, name: user.name, email: user.email, plan: user.plan } });
+    res.json({ message: 'Verified', token, user: { id: user._id, name: user.name, email: user.email, plan: user.plan || 'free' } });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
-// SEND LOGIN OTP (passwordless)
-router.post('/send-login-otp', async (req, res) => {
-  try {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ error: 'Email required' });
-    const user = await findUserByEmail(email);
-    if (!user) return res.status(404).json({ error: 'No account found' });
-    const otp = genOtp();
-    await saveOtp(email, otp);
-    await sendOtpEmail(email, otp, user.name);
-    res.json({ message: 'OTP sent to email' });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'Failed to send OTP' }); }
-});
-
-// VERIFY LOGIN OTP
-router.post('/login-otp-verify', async (req, res) => {
+// ── VERIFY RESET OTP
+router.post('/verify-reset-otp', async (req, res) => {
   try {
     const { email, otp } = req.body;
     if (!email || !otp) return res.status(400).json({ error: 'Email and OTP required' });
     const user = await verifyOtp(email, otp);
-    if (!user) return res.status(400).json({ error: 'Invalid or expired OTP' });
-    const token = generateToken(user._id);
-    res.json({ message: 'Login successful', token, user: { id: user._id, name: user.name, email: user.email, plan: user.plan } });
+    if (!user) return res.status(400).json({ error: 'Invalid or expired code' });
+    const resetToken = generateToken(user._id);
+    res.json({ message: 'OTP verified', token: resetToken });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
-// GET /me
+// ── RESET PASSWORD
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, token, password } = req.body;
+    if (!email || !token || !password) return res.status(400).json({ error: 'Email, token and password required' });
+    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    const user = await findUserByEmail(email);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    let decoded;
+    try { decoded = verifyToken(token); } catch(e) { return res.status(401).json({ error: 'Invalid or expired reset link' }); }
+    if (decoded.userId.toString() !== user._id.toString()) return res.status(401).json({ error: 'Invalid reset token' });
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await updateUser(user._id, { password: hashedPassword });
+    res.json({ message: 'Password reset successful' });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── GET ME
 router.get('/me', authMiddleware, async (req, res) => {
   const { password, otp, otpExpiry, ...safe } = req.user.toObject();
   res.json({ user: safe });
 });
 
-// UPDATE PROFILE
+// ── UPDATE PROFILE
 router.put('/profile', authMiddleware, async (req, res) => {
   try {
     const { name, currentPassword, newPassword } = req.body;
@@ -104,6 +137,7 @@ router.put('/profile', authMiddleware, async (req, res) => {
     if (name) updates.name = name.trim();
     if (newPassword) {
       if (!currentPassword) return res.status(400).json({ error: 'Current password required' });
+      if (!req.user.password) return res.status(400).json({ error: 'Google accounts cannot change password this way' });
       const match = await bcrypt.compare(currentPassword, req.user.password);
       if (!match) return res.status(401).json({ error: 'Current password incorrect' });
       if (newPassword.length < 6) return res.status(400).json({ error: 'Password min 6 chars' });
@@ -115,11 +149,7 @@ router.put('/profile', authMiddleware, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
-
-
-// ─────────────────────────────────────────────
-// DELETE ACCOUNT
-// ─────────────────────────────────────────────
+// ── DELETE ACCOUNT
 router.delete('/account', authMiddleware, async (req, res) => {
   try {
     await deleteUser(req.user._id);
