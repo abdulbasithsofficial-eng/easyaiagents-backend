@@ -159,6 +159,9 @@ router.post('/payment-submit', authMiddleware, async (req, res) => {
       });
       const { password, otp, ...safe } = updated.toObject();
       console.log(`✅ PAYMENT VERIFIED & PLAN UPGRADED: ${req.user.email} → ${planId}`);
+      // Send plan upgrade email
+      const { sendPlanEmail } = require('./mailer');
+      sendPlanEmail(req.user.email, req.user.name, planId, 'payment').catch(console.error);
       return res.json({
         message: `Payment verified! You've been upgraded to ${plan.name} plan.`,
         verified: true,

@@ -48,6 +48,9 @@ router.post('/signup', async (req, res) => {
     const user = await createUser({ name: name.trim(), email, password: hashedPassword, emailVerified: true, plan: 'free' });
     const token = generateToken(user._id);
     res.status(201).json({ message: 'Account created', token, user: { id: user._id, name: user.name, email: user.email, plan: user.plan || 'free' } });
+    // Send welcome email
+    const { sendWelcomeEmail } = require('./mailer');
+    sendWelcomeEmail(user.email, user.name).catch(console.error);
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
