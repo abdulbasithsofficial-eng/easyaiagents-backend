@@ -5,12 +5,16 @@ const { authMiddleware } = require('./auth-middleware');
 const mongoose = require('mongoose');
 
 // ── ADMIN EMAIL
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'abdulbasithsofficial@gmail.com';
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'abdulbasithsofficial@gmail.com').toLowerCase().trim();
 
-// ── ADMIN MIDDLEWARE — sirf admin access kar sakta hai
+// ── ADMIN MIDDLEWARE — strict double check
 function adminMiddleware(req, res, next) {
-  if (!req.user || req.user.email !== ADMIN_EMAIL) {
-    return res.status(403).json({ error: 'Admin access only' });
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  if (req.user.email.toLowerCase().trim() !== ADMIN_EMAIL) {
+    console.warn(`⛔ Unauthorized admin attempt: ${req.user.email}`);
+    return res.status(403).json({ error: 'Admin access only. Unauthorized.' });
   }
   next();
 }
